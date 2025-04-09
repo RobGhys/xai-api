@@ -1,0 +1,24 @@
+[package]
+name = "xai-api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.3"
+tokio = { version = "1.44.2", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+utoipa = { version = "5.3.1", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9.0.1", features = ["axum"] }
+dotenv = "0.15.0"
+
+sqlx = { version = "0.8.3", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "any",
+    "macros",
+] }
+tracing = "0.1.41"
+tower-http = { version = "0.6.2", features = ["trace"] }
