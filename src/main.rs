@@ -1,20 +1,23 @@
 mod api;
 mod config;
 mod db;
+mod enums;
 mod error;
 mod models;
 mod routes;
+mod services;
 
-use api::openapi::{ApiDoc, create_swagger_ui};
+use api::openapi::{create_swagger_ui};
 use config::Config;
 use db::connection::establish_connection;
-use db::migrations::run_migrations;
 use dotenv::dotenv;
 use routes::create_router;
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tower_http::cors::{CorsLayer, Any};
+use axum::http::{Method, HeaderValue};
+use axum::http::header::CONTENT_TYPE;
+
 
 #[tokio::main]
 async fn main() {
@@ -32,13 +35,19 @@ async fn main() {
 
     // DB connection
     let pool = establish_connection(&config).await;
-    run_migrations(&pool).await;
+
+    // CORS
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap()) // Vite
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers([CONTENT_TYPE]);
 
     // build our application with a route
     let app = create_router()
         // Add Swagger UI
         .merge(create_swagger_ui())
         .layer(TraceLayer::new_for_http())
+        .layer(cors)
         // Add DB pool
         .with_state(pool);
 

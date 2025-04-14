@@ -11,3 +11,8 @@ cargo add tokio --features macros,rt-multi-thread
 docker build -t app-postgres .
 docker run -d --name app-db -p 5432:5432 app-postgres
 ```
+
+## Format the code
+```
+cargo fmt
+```

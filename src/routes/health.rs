@@ -7,6 +7,6 @@
     ),
     tag = "health"
 )]
-pub async fn root() -> &'static str {
+pub async fn health_check() -> &'static str {
     "API is running!"
 }
