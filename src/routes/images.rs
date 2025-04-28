@@ -17,10 +17,11 @@ use crate::error::AppError;
 use crate::models::image::{Image, ImageData, ImageDataSet, ImageSet};
 use crate::models::mask::{Mask, MaskImage};
 use crate::services;
+use crate::services::images::process_patient_dirs;
 
 const BASE_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("IMAGES_PATH")
-        .unwrap_or_else(|_| "/Users/rob/projects/xai_lung_tum/serv_data".to_string())
+        .unwrap_or_else(|_| "/Users/rob/projects/xai_lung_tum/xp_data_paper".to_string())
 });
 
 pub fn routes() -> Router<PgPool> {
@@ -30,7 +31,7 @@ pub fn routes() -> Router<PgPool> {
         .route("/images", get(get_images))
         .route("/images/{id}/set", get(get_image_with_masks))
         .route("/file/{patient_nb}/{filename}", get(serve_file))
-        .route("/file/{patient_nb}", get(serve_patient_files))
+        .route("/images/process", get(process_all_patients))
 }
 
 #[utoipa::path(
@@ -138,7 +139,7 @@ pub async fn get_image_with_masks(
 
     let masks = sqlx::query_as!(
         Mask,
-        r#"SELECT id, image_id, mask_type as "mask_type: MaskType", filename FROM masks WHERE image_id = $1"#,
+        r#"SELECT id, image_id, mask_type as "mask_type!: MaskType", filename FROM masks WHERE image_id = $1"#,
         image.id
     )
         .fetch_all(&pool)
@@ -147,14 +148,12 @@ pub async fn get_image_with_masks(
 
     let image_set = ImageSet {
         original_image: format!("/file/{}/{}", image.patient_nb, image.filename),
-        // original_image: format!("{}/{}/{}", &*BASE_URL, image.patient_nb, image.filename),
         masks: masks
             .into_iter()
             .map(|mask| MaskImage {
                 id: mask.id.to_string(),
                 r#type: format!("{:?}", mask.mask_type).to_lowercase(),
                 image_url: format!("file/{}/{}", image.patient_nb, mask.filename),
-                //image_url: format!("{}/{}/{}", &*BASE_URL, image.patient_nb, mask.filename),
                 content_type: None,
                 image_data: None,
             })
@@ -224,71 +223,20 @@ pub async fn serve_file(Path((patient_nb, filename)): Path<(String, String)>,
 
 #[utoipa::path(
     get,
-    path = "/file/{patient_nb}",
-    params(
-        ("patient_nb" = String, Path, description = "Patient Number")
-    ),
+    path = "/images/process",
     responses(
-        (status = 200, description = "Found files for patient"),
-        (status = 404, description = "Could not find some or all the files for patient"),
+        (status = 200, description = "Processed patient directories successfully"),
         (status = 500, description = "Internal Server Error")
     ),
-    tag = "files"
+    tag = "images"
 )]
-pub async fn serve_patient_files(
+pub async fn process_all_patients(
     State(pool): State<PgPool>,
-    Path(patient_nb): Path<String>
 ) -> Result<impl IntoResponse, AppError> {
-
-    tracing::info!("test");
-    // Find all images with requested patient_nb
-    let images = sqlx::query_as!(
-        Image,
-        "SELECT id, filename, patient_nb FROM images WHERE patient_nb = $1",
-        patient_nb
-    )
-        .fetch_all(&pool)
-        .await
-        .map_err(AppError::from)?;
-
-    // Get the first image only. We only handle 1 image per patient
-    let image = &images[0];
-
-    let image_data = services::images::build_image_data(&patient_nb, image, &BASE_URL).await?;
-
-    // Get all masks related to the image
-    // let masks = sqlx::query_as!(
-    //     Mask,
-    //     r#"SELECT id, image_id, mask_type as "mask_type: MaskType", filename FROM masks WHERE image_id = $1"#,
-    //     image.id
-    // )
-    //     .fetch_all(&pool)
-    //     .await
-    //     .map_err(AppError::from)?;
-    //
-    // let image_set = ImageDataSet {
-    //     image: image_data,
-    //     masks: masks
-    //         .into_iter()
-    //         .map(|mask| MaskImage {
-    //             id: mask.id.to_string(),
-    //             r#type: format!("{:?}", mask.mask_type).to_lowercase(),
-    //             image_url: format!("{}/{}/{}", &*BASE_URL, image.patient_nb, mask.filename),
-    //             content_type: None,
-    //             image_data: None,
-    //         })
-    //         .collect(),
-    // };
-
-    // tracing::info!(
-    //     "Found Images Set: {}",
-    //     to_string_pretty(&image_set).unwrap()
-    // );
-    let json = serde_json::to_string(&image_data).map_err(AppError::from)?;
+    process_patient_dirs(State(pool),  &*BASE_URL).await?;
 
     Ok((
         StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        json,
+        Json(serde_json::json!({ "status": "success", "message": "Patient directories processed successfully" }))
     ))
 }
